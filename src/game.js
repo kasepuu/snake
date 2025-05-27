@@ -1,8 +1,8 @@
 const canvas = document.getElementById("field");
 const ctx = canvas.getContext("2d");
 
-const gridSize = 20;
-const tileCount = canvas.width / gridSize;
+let gridSize = 20;
+let tileCount = canvas.width / gridSize;
 let easyMode = false;
 let gameOver = false;
 let gameWon = false;
@@ -10,8 +10,15 @@ let score = 0;
 let snake = [{ x: 10, y: 10 }];
 let apple = { x: 15, y: 15 };
 let dx = 1, dy = 0;
+let pendingDx = 1, pendingDy = 0;
 let gameSpeed = 100;
 let restartButtonArea = null;
+let lastUpdateTime = 0;
+let lastKeyPress = 0;
+const KEY_PRESS_COOLDOWN = 0;
+
+// Queue for buffered inputs
+let inputQueue = [];
 
 const headImg = new Image();
 headImg.src = "src/textures/snakehead.png";
@@ -26,41 +33,63 @@ const foodImg = new Image();
 foodImg.src = "src/textures/food.png";
 
 function update() {
-    const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+    const currentTime = performance.now();
+    const deltaTime = currentTime - lastUpdateTime;
     
-    // Check for body collision
-    for (let i = 0; i < snake.length; i++) {
-        if (head.x === snake[i].x && head.y === snake[i].y) {
-            gameOver = true;
-            return;
+    if (deltaTime >= gameSpeed) {
+        while (inputQueue.length > 0) {
+            const input = inputQueue.shift();
+            if ((input.dx !== 0 && dx === 0) || (input.dx === 0 && dx !== 0) ||
+                (input.dy !== 0 && dy === 0) || (input.dy === 0 && dy !== 0)) {
+                dx = input.dx;
+                dy = input.dy;
+                break; 
+            }
         }
-    }
-    
-    snake.unshift(head);
-    if (head.x === apple.x && head.y === apple.y) {
-        apple.x = Math.floor(Math.random() * tileCount);
-        apple.y = Math.floor(Math.random() * tileCount);
-        score++;
         
-        // Check for win condition
-        if (score === tileCount * tileCount - 1) {
-            gameWon = true;
-            return;
+        const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+        
+        if (easyMode) {
+            if (head.x < 0) head.x = tileCount - 1;
+            if (head.x >= tileCount) head.x = 0;
+            if (head.y < 0) head.y = tileCount - 1;
+            if (head.y >= tileCount) head.y = 0;
+        } else {
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                gameOver = true;
+                return;
+            }
         }
-    } else {
-        snake.pop();
-    }
-
-    if (easyMode) {
-        if (head.x < 0) head.x = tileCount - 1;
-        if (head.x >= tileCount) head.x = 0;
-        if (head.y < 0) head.y = tileCount - 1;
-        if (head.y >= tileCount) head.y = 0;
-    } else {
-        if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-            gameOver = true;
-            return;
+        
+        for (let i = 0; i < snake.length - 1; i++) {
+            if (head.x === snake[i].x && head.y === snake[i].y) {
+                gameOver = true;
+                return;
+            }
         }
+        
+        snake.unshift(head);
+        if (head.x === apple.x && head.y === apple.y) {
+            let newApple;
+            do {
+                newApple = {
+                    x: Math.floor(Math.random() * tileCount),
+                    y: Math.floor(Math.random() * tileCount)
+                };
+            } while (snake.some(segment => segment.x === newApple.x && segment.y === newApple.y));
+            
+            apple = newApple;
+            score++;
+            
+            if (score === tileCount * tileCount - 1) {
+                gameWon = true;
+                return;
+            }
+        } else {
+            snake.pop();
+        }
+        
+        lastUpdateTime = currentTime;
     }
 }
 
@@ -77,6 +106,10 @@ function draw() {
     // Snake body
     for (let i = 1; i < snake.length - 1; i++) {
         const part = snake[i];
+        // Black background
+        ctx.fillStyle = "black";
+        ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
+        
         if (bodyImg.complete) {
             ctx.drawImage(bodyImg, part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
         } else {
@@ -88,6 +121,10 @@ function draw() {
     // Snake tail
     if (snake.length > 1) {
         const tail = snake[snake.length - 1];
+        // Black background
+        ctx.fillStyle = "black";
+        ctx.fillRect(tail.x * gridSize, tail.y * gridSize, gridSize - 1, gridSize - 1);
+        
         if (tailImg.complete) {
             ctx.save();
             ctx.translate(tail.x * gridSize + gridSize/2, tail.y * gridSize + gridSize/2);
@@ -110,10 +147,15 @@ function draw() {
 
     // Snake head
     const head = snake[0];
+    // Black background
+    ctx.fillStyle = "black";
+    ctx.fillRect(head.x * gridSize, head.y * gridSize, gridSize - 1, gridSize - 1);
+    
     if (headImg.complete) {
         ctx.save();
         ctx.translate(head.x * gridSize + gridSize/2, head.y * gridSize + gridSize/2);
         
+        // Rotate based on direction
         let angle = 0;
         if (dx === 1) angle = 0;
         else if (dx === -1) angle = Math.PI;
@@ -129,6 +171,10 @@ function draw() {
     }
 
     // Food
+    // Black background
+    ctx.fillStyle = "black";
+    ctx.fillRect(apple.x * gridSize, apple.y * gridSize, gridSize - 1, gridSize - 1);
+    
     if (foodImg.complete) {
         ctx.drawImage(foodImg, apple.x * gridSize, apple.y * gridSize, gridSize - 1, gridSize - 1);
     } else {
@@ -169,17 +215,38 @@ function draw() {
     }
 }
 
-export function startGame(difficulty) {
-    console.log(difficulty)
+export function startGame(difficulty, size) {
+    console.log(difficulty, size);
+    gridSize = size;
+    tileCount = canvas.width / gridSize;
+    
+    const center = Math.floor(tileCount / 2);
+    snake = [{ x: center, y: center }];
+    dx = 1;
+    dy = 0;
+    pendingDx = 1;
+    pendingDy = 0;
+    
+    let newApple;
+    do {
+        newApple = {
+            x: Math.floor(Math.random() * tileCount),
+            y: Math.floor(Math.random() * tileCount)
+        };
+    } while (snake.some(segment => segment.x === newApple.x && segment.y === newApple.y));
+    apple = newApple;
+    
     switch (difficulty) {
         case "easy":
-            easyMode = true
-            gameSpeed = 150;
+            easyMode = true;
+            gameSpeed = 200;
             break;
         case "medium":
-            gameSpeed = 100;
+            easyMode = false;
+            gameSpeed = 200;
             break;
         case "hard":
+            easyMode = false;
             gameSpeed = 80;
             break;
         case "custom":
@@ -187,32 +254,80 @@ export function startGame(difficulty) {
             gameSpeed = 20;
             break;
     }
-    gameLoop()
+    lastUpdateTime = performance.now();
+    gameLoop();
 }
 
 function gameLoop() {
     draw();
-    if (gameOver) return;
+    if (gameOver || gameWon) return;
     update();
-    setTimeout(gameLoop, gameSpeed);
+    requestAnimationFrame(gameLoop);
 }
 
 export function resetGame() {
-    snake = [{ x: 10, y: 10 }];
-    apple = { x: 15, y: 15 };
+    const center = Math.floor(tileCount / 2);
+    snake = [{ x: center, y: center }];
     dx = 1;
     dy = 0;
+    pendingDx = 1;
+    pendingDy = 0;
+    
+    // Place a new apple away from snake
+    let newApple;
+    do {
+        newApple = {
+            x: Math.floor(Math.random() * tileCount),
+            y: Math.floor(Math.random() * tileCount)
+        };
+    } while (snake.some(segment => segment.x === newApple.x && segment.y === newApple.y));
+    apple = newApple;
+    
     score = 0;
     gameOver = false;
     gameWon = false;
+    lastUpdateTime = performance.now();
     gameLoop();
 }
 
 document.addEventListener("keydown", e => {
-    if (e.key === "ArrowUp" && dy === 0) { dx = 0; dy = -1; }
-    if (e.key === "ArrowDown" && dy === 0) { dx = 0; dy = 1; }
-    if (e.key === "ArrowLeft" && dx === 0) { dx = -1; dy = 0; }
-    if (e.key === "ArrowRight" && dx === 0) { dx = 1; dy = 0; }
+    const currentTime = performance.now();
+    if (currentTime - lastKeyPress < KEY_PRESS_COOLDOWN) return;
+    lastKeyPress = currentTime;
+    
+    let newDx = dx;
+    let newDy = dy;
+    
+    switch (e.key) {
+        case "ArrowUp":
+            if (dy === 0) { 
+                newDx = 0;
+                newDy = -1;
+            }
+            break;
+        case "ArrowDown":
+            if (dy === 0) {
+                newDx = 0;
+                newDy = 1;
+            }
+            break;
+        case "ArrowLeft":
+            if (dx === 0) {
+                newDx = -1;
+                newDy = 0;
+            }
+            break;
+        case "ArrowRight":
+            if (dx === 0) {
+                newDx = 1;
+                newDy = 0;
+            }
+            break;
+    }
+    
+    if (newDx !== dx || newDy !== dy) {
+        inputQueue.push({ dx: newDx, dy: newDy });
+    }
 });
 
 canvas.addEventListener("click", e => {

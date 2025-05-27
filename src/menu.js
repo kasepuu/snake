@@ -5,7 +5,9 @@ const ctx = canvas.getContext("2d");
 
 let menuActive = true;
 let difficulty = "easy";
+let boardSize = 20;
 const difficulties = ["easy", "medium", "hard", "custom"];
+const boardSizes = [10, 20, 40, 50]; 
 const buttonAreas = [];
 
 
@@ -22,10 +24,8 @@ export function drawMenu() {
 
     drawButton("Start Game", 150, () => {
         menuActive = false;
-        startGame(difficulty);
+        startGame(difficulty, boardSize);
     });
-
-
 
     drawButton(`Difficulty: ${difficulty}`, 200, () => {
         let currentIndex = difficulties.indexOf(difficulty);
@@ -33,11 +33,36 @@ export function drawMenu() {
         difficulty = difficulties[currentIndex];
         drawMenu();
     });
+
+    const boardSizeY = 250;
+    const buttonWidth = 40;
+    const spacing = 10;
+    const totalWidth = buttonWidth * 2 + spacing + 100;
+    const startX = (canvas.width - totalWidth) / 2;
+
+    drawButton("-", boardSizeY, () => {
+        let currentIndex = boardSizes.indexOf(boardSize);
+        if (currentIndex > 0) {
+            boardSize = boardSizes[currentIndex - 1];
+            drawMenu();
+        }
+    }, startX, buttonWidth);
+
+    ctx.fillStyle = "white";
+    ctx.font = "16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`${boardSize}x${boardSize}`, startX + buttonWidth + spacing + 50, boardSizeY + 20);
+
+    drawButton("+", boardSizeY, () => {
+        let currentIndex = boardSizes.indexOf(boardSize);
+        if (currentIndex < boardSizes.length - 1) {
+            boardSize = boardSizes[currentIndex + 1];
+            drawMenu();
+        }
+    }, startX + buttonWidth + spacing + 100, buttonWidth);
 }
 
-function drawButton(text, y, onClick) {
-    const x = canvas.width / 2 - 75;
-    const width = 150;
+function drawButton(text, y, onClick, x = canvas.width / 2 - 75, width = 150) {
     const height = 30;
 
     ctx.fillStyle = "darkgreen";
@@ -46,7 +71,7 @@ function drawButton(text, y, onClick) {
     ctx.fillStyle = "white";
     ctx.font = "16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(text, canvas.width / 2, y + 20);
+    ctx.fillText(text, x + width/2, y + 20);
 
     buttonAreas.push({ x, y, width, height, onClick });
 }
